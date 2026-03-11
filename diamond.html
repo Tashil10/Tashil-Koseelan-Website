@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>3D Diamond</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { width: 100%; height: 100vh; overflow: hidden; background: transparent; }
+    #canvas-container { width: 100%; height: 100%; display: block; }
+  </style>
+</head>
+<body>
+  <div id="canvas-container"></div>
+  <script type="importmap">
+    {
+      "imports": {
+        "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+        "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+      }
+    }
+  </script>
+  <script type="module">
+    import * as THREE from 'three';
+
+    const container = document.getElementById('canvas-container');
+    const width = container.clientWidth;
+    const height = container.clientHeight;
+
+    const scene = new THREE.Scene();
+    const camera = new THREE.PerspectiveCamera(50, width / height, 0.1, 1000);
+    camera.position.z = 4;
+
+    const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+    renderer.setSize(width, height);
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    renderer.setClearColor(0x000000, 0);
+    renderer.outputColorSpace = THREE.SRGBColorSpace;
+    container.appendChild(renderer.domElement);
+
+    container.addEventListener('click', () => {
+      try {
+        if (window.parent !== window) window.parent.postMessage({ type: 'toggleTheme' }, '*');
+      } catch (_) {}
+    });
+
+    const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    let isDark = false;
+    window.addEventListener('message', (e) => {
+      if (e.data && e.data.type === 'setTheme') {
+        isDark = e.data.theme === 'dark';
+        material.color.setHex(isDark ? 0xe07070 : 0xc8f0ff);
+        material.emissive.setHex(isDark ? 0x331818 : 0x112233);
+        material.emissiveIntensity = isDark ? 0.18 : 0.12;
+        ambient.color.setHex(isDark ? 0x994444 : 0x6699cc);
+        fill.color.setHex(isDark ? 0xcc6666 : 0xaaccff);
+      }
+    });
+    try {
+      if (window.parent !== window) window.parent.postMessage({ type: 'diamondReady' }, '*');
+    } catch (_) {}
+
+    // Brilliant cut: 8-sided (octagonal), transparent emerald-like gem
+    const radialSegments = 8;
+    const tableRadius = 0.38;
+    const girdleRadius = 0.5;
+    const crownHeight = 0.12;
+    const pavilionHeight = 0.55;
+
+    const material = new THREE.MeshPhysicalMaterial({
+      color: 0xd8f4ff,
+      metalness: 0,
+      roughness: 0.03,
+      clearcoat: 1,
+      clearcoatRoughness: 0.02,
+      sheen: 0.35,
+      sheenColor: 0xffffff,
+      sheenRoughness: 0.12,
+      transparent: true,
+      opacity: 0.88,
+    });
+    material.emissive.setHex(0x1a3355);
+    material.emissiveIntensity = 0.06;
+    const outlineMat = new THREE.MeshBasicMaterial({
+      color: 0x000000,
+      side: THREE.BackSide,
+      transparent: true,
+      opacity: 0.4,
+    });
+    const edgeMat = new THREE.LineBasicMaterial({
+      color: 0x3a3a4a,
+      transparent: true,
+      opacity: 0.5,
+    });
+
+    // Crown: flat table on top, sides angle down to girdle (one piece, no step)
+    const crownGeom = new THREE.CylinderGeometry(tableRadius, girdleRadius, crownHeight, radialSegments);
+    const crown = new THREE.Mesh(crownGeom, material);
+    crown.position.y = -0.01;
+    const outlineCrown = new THREE.Mesh(crownGeom.clone(), outlineMat);
+    outlineCrown.position.y = crown.position.y;
+    outlineCrown.scale.multiplyScalar(1.02);
+
+    // Pavilion: cone from girdle down to point (culet)
+    const pavilionGeom = new THREE.ConeGeometry(girdleRadius, pavilionHeight, radialSegments);
+    const pavilion = new THREE.Mesh(pavilionGeom, material);
+    pavilion.rotation.x = Math.PI;
+    pavilion.position.y = -crownHeight / 2 - pavilionHeight / 2;
+    const outlinePavilion = new THREE.Mesh(pavilionGeom.clone(), outlineMat);
+    outlinePavilion.rotation.x = Math.PI;
+    outlinePavilion.position.y = pavilion.position.y;
+    outlinePavilion.scale.multiplyScalar(1.02);
+
+    // Edge lines for facets (subtle)
+    const crownEdges = new THREE.LineSegments(
+      new THREE.EdgesGeometry(crownGeom, 15),
+      edgeMat
+    );
+    crownEdges.position.y = crown.position.y;
+    const pavilionEdges = new THREE.LineSegments(
+      new THREE.EdgesGeometry(pavilionGeom, 15),
+      edgeMat
+    );
+    pavilionEdges.rotation.x = Math.PI;
+    pavilionEdges.position.y = pavilion.position.y;
+
+    const group = new THREE.Group();
+    group.add(outlineCrown);
+    group.add(outlinePavilion);
+    group.add(crown);
+    group.add(pavilion);
+    group.add(crownEdges);
+    group.add(pavilionEdges);
+    scene.add(group);
+
+    // Lights: strong key/fill/rim for glossy reflections (ambient/fill tint changes with theme)
+    const ambient = new THREE.AmbientLight(0x6699cc, 0.5);
+    scene.add(ambient);
+    const key = new THREE.DirectionalLight(0xffffff, 1.2);
+    key.position.set(4, 5, 6);
+    scene.add(key);
+    const fill = new THREE.DirectionalLight(0xaaccff, 0.65);
+    fill.position.set(-3, 2, 4);
+    scene.add(fill);
+    const rim = new THREE.DirectionalLight(0xffffff, 0.5);
+    rim.position.set(0, -2, -3);
+    scene.add(rim);
+    const topLight = new THREE.DirectionalLight(0xffffff, 0.4);
+    topLight.position.set(0, 8, 2);
+    scene.add(topLight);
+
+    let time = 0;
+    let isHovering = false;
+    const speedBaseLight = 0.012;
+    const speedHoverLight = 0.048;
+    const speedBaseDark = 0.005;
+    const speedHoverDark = 0.032;
+    let currentSpeed = speedBaseLight;
+    const speedLerp = 0.06;
+
+    renderer.domElement.addEventListener('mouseenter', () => { isHovering = true; });
+    renderer.domElement.addEventListener('mouseleave', () => { isHovering = false; });
+
+    function animate() {
+      requestAnimationFrame(animate);
+      if (reducedMotion) {
+        group.rotation.y = 0;
+        group.rotation.x = 0;
+      } else {
+        const speedBase = isDark ? speedBaseDark : speedBaseLight;
+        const speedHover = isDark ? speedHoverDark : speedHoverLight;
+        const targetSpeed = isHovering ? speedHover : speedBase;
+        currentSpeed += (targetSpeed - currentSpeed) * speedLerp;
+        time += currentSpeed;
+        group.rotation.y = time;
+        group.rotation.x = Math.sin(time * 0.5) * 0.12;
+      }
+      renderer.render(scene, camera);
+    }
+    animate();
+
+    window.addEventListener('resize', () => {
+      const w = container.clientWidth;
+      const h = container.clientHeight;
+      camera.aspect = w / h;
+      camera.updateProjectionMatrix();
+      renderer.setSize(w, h);
+    });
+  </script>
+</body>
+</html>
